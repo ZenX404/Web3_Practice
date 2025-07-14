@@ -26,6 +26,7 @@ class Block {
             .digest('hex'); // 转换为十六进制
     }
 
+    // POW挖矿
     mineBlock(difficulty) {
         // 生成字符串"0000"的巧妙写法，利用往空数组间隙插入字符'0'来实现
         const target = Array(difficulty + 1).join('0');
