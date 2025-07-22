@@ -35,6 +35,7 @@ contract BankContract {
         for (uint256 i = 0; i < TOP_COUNT; i++) {
             if (depositor == topAddr[i]) {
                 _updateTop();
+                return;
             }
         }
 
@@ -47,7 +48,8 @@ contract BankContract {
         }
 
         if (index != 0) {
-            topAddr[index - 1] = depositor;
+            topAddr[0] = depositor;
+            _updateTop();
         }
     }
 
