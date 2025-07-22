@@ -40,7 +40,7 @@ contract BankContract {
 
         uint256 index = 0;
         while (index < TOP_COUNT) {
-            if (balances[depositor] <= balances[topAddr[index]]) {
+            if (balance <= balances[topAddr[index]]) {
                 break;
             }
             index++;
@@ -65,10 +65,27 @@ contract BankContract {
     }
 
     // 获取前TOP名的存款
-    function getTopBalance() public {
-        
+    function getTopBalance() external view returns (address[TOP_COUNT] memory, uint256[TOP_COUNT] memory) {
+       
+        uint256[TOP_COUNT] memory topBalance;
+        for (uint8 i = 0; i < TOP_COUNT; i++) {
+            topBalance[i] = balances[topAddr[i]];
+        }
+
+        return (topAddr, topBalance);
     }
 
     // 合约管理员提取合约金额
+    function withDraw() external {
+        require(msg.sender == admin, "Only admin can withdraw");
 
+        uint256 totalBalance = address(this).balance;
+
+        require(totalBalance > 0, "No balance to withdraw");
+
+        // 将合约的所有ETH转给管理员
+        // 将当前合约（因为call函数是被当前智能合约执行的）中的资金转给admin这个地址
+        (bool success, ) = admin.call{value : totalBalance}("");
+        require(success, "Withdrawal failed");
+    }
 }
