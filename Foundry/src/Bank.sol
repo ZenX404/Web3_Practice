@@ -3,7 +3,7 @@ pragma solidity^0.8.9;
 
 contract BankContract {
     mapping(address => uint256) public balances;
-    address private admin;
+    address public admin;
     
     uint8 private constant TOP_COUNT = 3;
     address[TOP_COUNT] public topAddr;
