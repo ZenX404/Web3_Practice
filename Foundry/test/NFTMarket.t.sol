@@ -122,6 +122,8 @@ contract NFTMarketTest is Test {
 
     address public seller = address(1);
     address public buyer = address(2);
+    // 授权操作员地址
+    address public operator = address(3);
     
 
     function setUp() public {
@@ -138,7 +140,7 @@ contract NFTMarketTest is Test {
         nft.mint(seller, 811);
     }
 
-    // 测试上架NFT成功的情况
+    // 1、上架NFT：测试上架成功和失败情况，要求断言错误信息和上架事件。
     function testListNFT() public {
         // 切换到卖家账户。这个函数和prank()函数的区别就是：prank()函数只作用于下一次的函数调用，startPrank()作用于后面所有的函数调用
         // 从现在开始，所有的交易都以指定地址的身份执行
@@ -182,6 +184,154 @@ contract NFTMarketTest is Test {
 
         // 结束以seller地址进行模拟调用，之后的交易会继续默认以测试合约自身的身份执行
         vm.stopPrank();
+    }
+
+    // 测试非所有者上架NFT失败的情况
+    function testListNFTFailureNotOwner() public {
+        // 切换到非所有者账户
+        vm.startPrank(buyer);
+        
+        // 预期会失败，并显示特定错误信息
+        vm.expectRevert("NFTMarket: caller is not owner nor approved");
+        nftMarketContract.list(address(nft), 811, 50 * 10 ** 18);
+        
+        vm.stopPrank();
+    }
+    
+    // 测试价格为零上架NFT失败的情况
+    function testListNFTFailureZeroPrice() public {
+        // 切换到卖家账户
+        vm.startPrank(seller);
+        
+        // 预期会失败，并显示特定错误信息
+        vm.expectRevert("NFTMarket: price should be greater zero");
+        nftMarketContract.list(address(nft), 811, 0);
+        
+        vm.stopPrank();
+    }
+    
+    // 测试NFT合约地址为零上架NFT失败的情况
+    function testListNFTFailureZeroAddress() public {
+        // 切换到卖家账户
+        vm.startPrank(seller);
+        
+        // 预期会失败，并显示特定错误信息
+        vm.expectRevert("NFTMarket: nftContractAddr can't be zero");
+        nftMarketContract.list(address(0), 811, 50 * 10 ** 18);
+        
+        vm.stopPrank();
+    }
+    
+    // 测试授权操作员上架NFT成功的情况
+    function testListNFTByApprovedOperator() public {
+        // 卖家授权操作员
+        vm.startPrank(seller);
+        nft.setApprovalForAll(operator, true);
+        vm.stopPrank();
+        
+        // 切换到操作员账户
+        vm.startPrank(operator);
+        
+        // 预期会发出NFTListed事件
+        vm.expectEmit(true, true, true, true);
+        emit NFTMarket.NFTListed(0, seller, address(nft), 811, 50 * 10 ** 18);
+        
+        // 操作员上架NFT
+        uint256 listingId = nftMarketContract.list(address(nft), 811, 50 * 10 ** 18);
+        
+        // 验证上架信息
+        (address listedSeller, , , , ) = nftMarketContract.listings(listingId);
+        assertEq(listedSeller, seller, "Seller should be the NFT owner, not the operator");
+        
+        vm.stopPrank();
+    }
+    
+    // 测试单个代币授权上架NFT成功的情况
+    function testListNFTByApprovedForToken() public {
+        // 卖家授权特定代币
+        vm.startPrank(seller);
+        nft.approve(operator, 811);
+        vm.stopPrank();
+        
+        // 切换到被授权账户
+        vm.startPrank(operator);
+        
+        // 预期会发出NFTListed事件
+        vm.expectEmit(true, true, true, true);
+        emit NFTMarket.NFTListed(0, seller, address(nft), 811, 50 * 10 ** 18);
+        
+        // 被授权账户上架NFT
+        uint256 listingId = nftMarketContract.list(address(nft), 811, 50 * 10 ** 18);
+        
+        // 验证上架信息
+        (address listedSeller, , , , ) = nftMarketContract.listings(listingId);
+        assertEq(listedSeller, seller, "Seller should be the NFT owner, not the approved address");
+        
+        vm.stopPrank();
+    }
+
+    // 2、购买NFT：测试购买成功、自己购买自己的NFT、NFT被重复购买、支付Token过多或者过少情况，要求断言错误信息和购买事件。
+    function testBuyNFTSuccess() public {
+        // 先上架NFT
+        vm.startPrank(seller);
+        // 将自己的NFT授权给NFTMarket
+        nft.approve(address(nftMarketContract), 811);
+        uint256 listingId = nftMarketContract.list(address(nft), 811, 50 * 10 ** 18);
+        vm.stopPrank();
+
+
+        vm.startPrank(buyer);
+        // 将自己的Token授权给NFTMarket
+        token.approve(address(nftMarketContract), 500 * 10 ** 18);
+        vm.expectEmit(true, true, true, true);
+        emit NFTMarket.NFTSold(0, seller, buyer, address(nft), 811, 50 * 10 ** 18);
+        nftMarketContract.buyNFT(0);
+
+        vm.stopPrank();
+    }
+
+
+    // 3、模糊测试：测试随机价格上架NFT并随机地址购买NFT
+    // 函数名以 testFuzz_ 开头，Foundry 会自动识别为模糊测试
+    /**
+     * 入参：
+     * fuzzPrice：Foundry 会生成随机的 uint256 价格
+     * fuzzBuyer：Foundry 会生成随机的 address 买家地址
+     */
+    function testFuzz_ListAndBuyNFT(uint256 fuzzPrice, address fuzzBuyer) public {
+        uint256 listingPrice = bound(fuzzPrice, 10 ** 16, 10000 * 10 * 18);
+
+        vm.assume(fuzzBuyer != seller);
+        vm.assume(fuzzBuyer != address(0));
+        vm.assume(fuzzBuyer != address(NFTMarket));
+        vm.assume(fuzzBuyer != address(this));
+
+
+        token.mint(fuzzBuyer, listingPrice * 2);
+
+        vm.startPrank(seller);
+        uint256 listingId = nftMarketContract.list(address(nft), 811, 50 * 10 * 18);
+
+        nft.approve(address(nftMarketContract), 811);
+
+        vm.stopPrank();
+
+        vm.startPrank(fuzzBuyer);
+
+        token.approve(address(nftMarketContract), 100 * 10 * 18);
+
+        vm.expectEmit(true, true, true, true);
+        emit NFTMarket.NFTSold(0, seller, fuzzBuyer, address(nft), 811, 50 * 10 ** 18);
+        nftMarketContract.buyNFT(listingId);
+
+        assertEq(nft.ownerOf(), fuzzBuyer, "NFT ownership should be transferred to buyer");
+        assertEq(token.balanceOf(seller), 50 * 10 ** 18, "token should be transferred to seller");
+
+        (, , , , bool isActive) = nftMarketContract.listings(listingId);
+        assertFalse(isActive, "Listing should be inactive after purchase");
+
+        vm.stopPrank();
+
     }
 }
 

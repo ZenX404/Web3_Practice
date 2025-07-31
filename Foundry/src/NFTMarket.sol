@@ -75,7 +75,7 @@ contract NFTMarket is ITokenReceiver {
 
         uint256 listId = nextListId;
         listings[listId] = Listing({
-            seller: msg.sender,
+            seller: nftOwner,  // 卖家必须得是NFT所有者，即使是操作员调用的上架，那卖家也得是NFT所有者
             nftContractAddr: nftContractAddr,
             tokenId: tokenId,
             price: price,
@@ -84,7 +84,7 @@ contract NFTMarket is ITokenReceiver {
 
         nextListId++;
 
-        emit NFTListed(listId, msg.sender, nftContractAddr, tokenId, price);
+        emit NFTListed(listId, nftOwner, nftContractAddr, tokenId, price);
 
         return listId;
     }
