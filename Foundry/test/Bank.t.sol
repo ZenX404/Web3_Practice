@@ -161,7 +161,8 @@ contract BankTest is Test {
 
         // 非管理员尝试取款，应该失败
         vm.prank(user1);
-        // 期望下一个函数雕鹰用改会失败，并且失败的原因应该是 "Only admin can withdraw" 这个错误消息
+        // 期望下一个函数调用应该会失败，并且失败的原因应该是 "Only admin can withdraw" 这个错误消息
+        // vm.expectRevert()用来期望require()函数返回的信息
         vm.expectRevert("Only admin can withdraw");
         bank.withDraw();
 
