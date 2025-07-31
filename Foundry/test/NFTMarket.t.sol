@@ -292,46 +292,142 @@ contract NFTMarketTest is Test {
 
 
     // 3、模糊测试：测试随机价格上架NFT并随机地址购买NFT
-    // 函数名以 testFuzz_ 开头，Foundry 会自动识别为模糊测试
+    /**
+     * 模糊测试是Foundry 框架中的一个非常强大的功能。
+     * ## 什么是模糊测试？
+
+        模糊测试（Fuzz Testing）是一种自动化测试技术，它会：
+        - 生成大量随机输入数据
+        - 用这些随机数据测试你的合约
+        - 寻找边界情况和潜在的漏洞
+        - Foundry 默认会运行 256 次不同的随机输入
+
+        函数名以 testFuzz_ 开头，Foundry 会自动识别为模糊测试
+     */
     /**
      * 入参：
      * fuzzPrice：Foundry 会生成随机的 uint256 价格
      * fuzzBuyer：Foundry 会生成随机的 address 买家地址
      */
     function testFuzz_ListAndBuyNFT(uint256 fuzzPrice, address fuzzBuyer) public {
-        uint256 listingPrice = bound(fuzzPrice, 10 ** 16, 10000 * 10 * 18);
+        // 首先要过滤一边参数，剔除掉无意义的随机值
+        // 限制价格范围在 0.01-10000 Token之间（考虑到18位小数）
+        /**
+         * bound()函数作用：
+            - 将随机生成的 `fuzzPrice` 限制在合理范围内
+            - 最小值：`10**16` = 0.01 Token（18位小数）
+            - 最大值：`10000 * 10**18` = 10,000 Token
+            - 为什么要限制？ 避免测试极端值（如0或超大数）导致测试无意义
 
+           `fuzzPrice` 是一个完全随机的数,如果不对它的范围加以限制，可能会遇到很多极端情况，导致测试无法通过
+
+            `bound()` 函数的作用就是限制fuzzPrice的大小，`bound()` 函数的工作原理：
+            // 伪代码理解
+            function bound(uint256 randomValue, uint256 min, uint256 max) returns (uint256) {
+                return min + (randomValue % (max - min + 1));
+            }
+
+            通过 `bound()` 函数将价格限制在合理范围内的价格
+         */
+        // 上架NFT要卖的价格
+        uint256 listingPrice = bound(fuzzPrice, 10 ** 16, 10000 * 10 ** 18);
+
+        // 确保买家地址有效（不为零地址，不是卖家，不是市场合约）
+        /**
+         * `vm.assume()` 函数作用：
+            - 告诉 Foundry："只在满足这些条件时运行测试"
+            - 如果条件不满足，跳过这次测试，生成新的随机值
+            - 过滤条件：
+            - `!= address(0)`：不能是零地址（无效地址）
+            - `!= seller`：买家不能是卖家（避免自己买自己）
+            - `!= address(market)`：不能是市场合约地址
+            - `!= address(this)`：不能是测试合约地址
+         */
         vm.assume(fuzzBuyer != seller);
         vm.assume(fuzzBuyer != address(0));
-        vm.assume(fuzzBuyer != address(NFTMarket));
+        vm.assume(fuzzBuyer != address(nftMarketContract));
         vm.assume(fuzzBuyer != address(this));
 
+        // 为买家铸造足够的代币
+        token.mint(fuzzBuyer, listingPrice * 2);  // 铸造两倍价格的代币，确保足够
 
-        token.mint(fuzzBuyer, listingPrice * 2);
-
+        // 卖家上架NFT
         vm.startPrank(seller);
-        uint256 listingId = nftMarketContract.list(address(nft), 811, 50 * 10 * 18);
-
+        uint256 listingId = nftMarketContract.list(address(nft), 811, listingPrice);
+        // 卖家授权市场合约转移NFT
         nft.approve(address(nftMarketContract), 811);
 
         vm.stopPrank();
 
+        // 切换到随机买家账户
         vm.startPrank(fuzzBuyer);
-
-        token.approve(address(nftMarketContract), 100 * 10 * 18);
-
+        // 买家授权市场合约转移代币
+        token.approve(address(nftMarketContract), listingPrice);
+        // 预期会发出NFTSold事件
         vm.expectEmit(true, true, true, true);
-        emit NFTMarket.NFTSold(0, seller, fuzzBuyer, address(nft), 811, 50 * 10 ** 18);
+        emit NFTMarket.NFTSold(0, seller, fuzzBuyer, address(nft), 811, listingPrice);
+        // 购买NFT
         nftMarketContract.buyNFT(listingId);
-
-        assertEq(nft.ownerOf(), fuzzBuyer, "NFT ownership should be transferred to buyer");
-        assertEq(token.balanceOf(seller), 50 * 10 ** 18, "token should be transferred to seller");
-
+        // 验证NFT所有权已转移
+        assertEq(nft.ownerOf(811), fuzzBuyer, "NFT ownership should be transferred to buyer");
+        // 验证代币已转移
+        assertEq(token.balanceOf(seller), listingPrice, "token should be transferred to seller");
+        // 验证上架信息已更新为非活跃
         (, , , , bool isActive) = nftMarketContract.listings(listingId);
         assertFalse(isActive, "Listing should be inactive after purchase");
 
         vm.stopPrank();
 
+    }
+
+
+    // 4、不可变测试：测试无论如何买卖，NFTMarket合约中都不可能有Token持仓
+    function testInvariant_NoTokenBalance() public {
+        // 设置初始场景：上架NFT
+        vm.startPrank(seller);
+        uint256 listingId = market.list(address(nftContract), tokenId, price);
+        nftContract.approve(address(market), tokenId);
+        vm.stopPrank();
+        
+        // 买家购买NFT
+        vm.startPrank(buyer);
+        paymentToken.approve(address(market), price);
+        market.buyNFT(listingId);
+        vm.stopPrank();
+        
+        // 验证市场合约中没有Token持仓
+        assertEq(paymentToken.balanceOf(address(market)), 0, "Market contract should not hold any tokens");
+        
+        // 再次上架NFT（现在由买家上架）
+        vm.startPrank(buyer);
+        uint256 newListingId = market.list(address(nftContract), tokenId, price * 2); // 双倍价格
+        nftContract.approve(address(market), tokenId);
+        vm.stopPrank();
+        
+        // 卖家（原来的）购买NFT
+        paymentToken.mint(seller, price * 2); // 为卖家铸造足够的代币
+        vm.startPrank(seller);
+        paymentToken.approve(address(market), price * 2);
+        market.buyNFT(newListingId);
+        vm.stopPrank();
+        
+        // 验证市场合约中仍然没有Token持仓
+        assertEq(paymentToken.balanceOf(address(market)), 0, "Market contract should not hold any tokens");
+        
+        // 测试使用回调方式购买
+        vm.startPrank(seller);
+        uint256 callbackListingId = market.list(address(nftContract), tokenId, price);
+        nftContract.approve(address(market), tokenId);
+        vm.stopPrank();
+        
+        // 买家使用回调方式购买NFT
+        vm.startPrank(buyer);
+        bytes memory data = abi.encode(callbackListingId);
+        paymentToken.transferWithCallbackAndData(address(market), price, data);
+        vm.stopPrank();
+        
+        // 验证市场合约中仍然没有Token持仓
+        assertEq(paymentToken.balanceOf(address(market)), 0, "Market contract should not hold any tokens after callback purchase");
     }
 }
 
