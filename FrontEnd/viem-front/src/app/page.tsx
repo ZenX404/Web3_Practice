@@ -30,7 +30,9 @@ const TOKEN_BANK_ADDRESS = "0xDe74ba2a8BCfb0da3a36f6BffbdE9f98ef4f3B84";
 export default function Home() {
   // useState Hook用于创建状态变量
   // 语法: const [变量名, 设置变量的函数] = useState(初始值)
-  const 
+  // 存储用户的Token余额
+  const [balace, setBalance] = useState<String>('0');
+  
 
 
   return (
