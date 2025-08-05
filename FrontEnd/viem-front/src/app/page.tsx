@@ -76,7 +76,7 @@ export default function Home() {
   const isCorrectNetwork = chainId === sepolia.id;
 
   // 清除错误信息的函数
-  // 箭头函数语法: const 函数名 = () => 函数体
+  // 箭头函数语法: const 函数名 = (函数入参) => 函数体
   const clearError = () => setError('');
 
   
@@ -230,6 +230,26 @@ export default function Home() {
     }
   };
 
+
+
+  // 断开钱包连接的函数
+  const disconnectWallet = () => {
+    // 重置状态变量
+    setIsConnected(false);
+    setAddress(undefined);
+    setChainId(undefined);
+    setError('');
+
+    // 移除事件监听器
+    if (windows.ethereum && windwos.ethereum.removeAllListeners === 'function') {
+      window.ethereum.removeAllListeners('accountsChanged');
+      window.ethereum.removeAllListeners('chainChanged');
+    }
+  };
+
+
+  // 获取各种余额的异步函数
+  
 
 
 
