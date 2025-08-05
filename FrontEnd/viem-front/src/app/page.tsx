@@ -24,15 +24,213 @@ import TokenBank_ABI from './contracts/TokenBank.json';
 const TOKEN_BANK_ADDRESS = "0xDe74ba2a8BCfb0da3a36f6BffbdE9f98ef4f3B84";
 
 
-// 导出默认函数组件 Home
+// 导出默认函数组件Home，React的组件本质上就是函数
 // export default 表示这是模块的默认导出
 // 函数组件是React中定义UI的方式
 export default function Home() {
-  // useState Hook用于创建状态变量
-  // 语法: const [变量名, 设置变量的函数] = useState(初始值)
+  // useState Hook用于创建状态变量及修改状态变量的函数
+  // 语法: const [变量名, 修改变量值的函数] = useState(初始值)
+
+  // 存储用户的ETH余额  并且通过setBalance修改balance变量值。balance默认值为0
+  const [balance, setBalance] = useState<String>('0');
+
   // 存储用户的Token余额
-  const [balace, setBalance] = useState<String>('0');
+  const [tokenBalance, setTokenBalance] = useState<string>('0');
+
+  // 存储用户在TokenBank中的存款余额
+  const [depositBalance, setDepositBalance] = useState<string>('0');
+
+  // 存储用户输入的存款金额
+  const [depositAmount, setDepositAmount] = useState<string>('');
   
+  // 存储用户输入的取款金额
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  
+  // 存储用户的钱包地址
+  // `0x${string}` | undefined 表示这个变量可能是以0x开头的字符串，也可能是undefined
+  const [address, setAddress] = useState<`0x${string}` | undefined>();
+  
+  // 存储钱包是否已连接的状态
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // 存储当前网络的链ID
+  const [chainId, setChainId] = useState<number | undefined>();
+  
+  // 存储是否正在加载的状态(用于显示加载动画)
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // 存储交易哈希
+  const [txHash, setTxHash] = useState<string>('');
+  
+  // 存储错误信息
+  const [error, setError] = useState<string>('');
+
+  // createPublicClient是viem提供的组件，用来创建连接区块链网络的客户端，实现与区块链的交互
+  const publicClient = createPublicClient({
+    chain: sepolia, // 指定使用Sepolia测试网
+    transport: http('https://sepolia.infura.io/v3/fb22f989d7e14bce8b720ab082a8a0fe')  // RPC端点(需要用viem提供的http函数转换一下)  用来与区块链交互
+  });
+
+  // 计算是否在正确的网络上
+  // 这是一个计算属性，每次chainId变化时都会重新计算
+  const isCorrectNetwork = chainId === sepolia.id;
+
+  // 清除错误信息的函数
+  // 箭头函数语法: const 函数名 = () => 函数体
+  const clearError = () => setError('');
+
+  
+  // 连接钱包的异步函数
+  // async/await 用于处理异步操作
+  const connectWallet = async () => {
+    // 清除之前的错误
+    setError('');
+
+    // 检查是否在浏览器环境中运行
+    // typeof window === 'undefined' 表示不在浏览器中(可能在服务器端)
+    if (typeof(window) === 'undefined') {
+      setError('请在浏览器中运行此应用');
+      return;  // 提前退出函数
+    }
+
+    // 检查是否安装了MetaMask钱包
+    // window.ethereum 是MetaMask注入到浏览器的对象
+    if (typeof(window.ethereum) === 'undefined') {
+      setError('请安装 MetaMask 钱包');
+      return;
+    }
+
+    try {
+      setIsLoading(true);  // 开始加载状态
+      
+      // 请求用户授权访问钱包账户
+      // await 等待异步操作完成，代码执行会停在这里等待响应数据
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts' // MetaMask申请访问钱包的标准方法
+      });
+
+      // 检查是否成功获取钱包账户
+      if (!accounts || accounts.length === 0) {
+        setError('未获取到账户信息');
+        return;
+      }
+
+      // 获取当前网络ID
+      const networkId = await window.ethereum.request({
+        method: 'eth_chainId'  // 请求获取当前钱包连接的chainId
+      });
+      // 将十六进制字符串转换为十进制数字
+      const currentChainId = parseInt(networkId, 16);
+
+      // 更新状态变量
+      // as `0x${string}` 是TypeScript的类型断言，告诉编译器这个值的类型
+      setAddress(accounts[0] as `0x${string}`);
+      setChainId(currentChainId);
+      setIsConnected(true);
+
+      // 检查是否在正确的网络上
+      if (currentChainId !== sepolia.id) {
+        setError(`请切换到 ${sepolia.name} 网络 (Chain ID: ${sepolia.id})`);
+        
+        // 尝试自动切换到Sepolia网络
+        // js中{}就表示对象结构  []就表示数组结构
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain', // metamask切换网络的方法
+            params: [{ chainId: `0x${sepolia.id.toString(16)}` }],  // 转换为十六进制
+          });
+        } catch (switchError: any) { // any类型表示任意类型
+          // 如果网络不存在，尝试添加网络
+          if (switchError.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: `0x${sepolia.id.toString(16)}`,
+                  chainName: sepolia.name,
+                  rpcUrls: ['https://eth-sepolia.public.blastapi.io'],
+                  nativeCurrency: {
+                    name: 'Sepolia ETH',
+                    symbol: 'ETH',
+                    decimals: 18,
+                  },
+                  blockExplorerUrls: ['https://sepolia.etherscan.io'],
+                }],
+              });
+            } catch (addError) {
+              console.error('添加网络失败:', addError);
+              setError('无法添加 Sepolia 网络，请手动添加');
+            }
+          } else {
+            console.error('切换网络失败:', switchError);
+            setError('无法切换到 Sepolia 网络');
+          }
+        }
+      } 
+      
+
+      // 在添加事件监听器之前，先尝试删除一波事件监听器，避免重复注册
+      if (window.ethereum && typeof(window.ethereum.removeAllListeners) === 'function') {
+        window.ehtereum.removeAllListeners('accountsChanged');
+        window.ehtereum.removeAllListeners('chainChanged');
+      }
+
+      // 添加事件监听器
+      // 监听账户变化事件,当用户在MetaMask中切换账户时会触发
+      /**
+       * 语法讲解：
+       * 这是一个箭头函数（Arrow Function），也叫匿名函数。
+          (accounts: string[]) 是函数的入参，类型是 string[]，即字符串数组，表示新的账户地址列表。
+          => { ... } 是箭头函数的主体，花括号 {} 里面可以写你希望在事件发生时执行的代码。
+       */
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        if (accounts.length === 0) {
+          // 用户断开了连接
+          setIsConnected(false);
+          setAddress(undefined);
+          setError('钱包已断开连接');
+        } else {
+          // 用户切换到了不同的账户
+          setAddress(accounts[0] as `0x${string}`);
+          clearError();
+        }
+      });
+
+
+      // 监听网络变化事件
+      // 当用户在MetaMask中切换网络时会触发
+      window.ethereum.on('chainChanged', (chainId: string) => {
+        const newChainId = parseInt(chainId, 16);
+        setChainId(newChainId);
+
+        if (newChainId !== sepolia.id) {
+          setError(`请切换到 ${sepolia.name} 网络 (Chain ID: ${sepolia.id})`);
+        } else {
+          clearError();
+        }
+      });
+
+    } catch (error : any) {
+      console.error('连接钱包失败:', error);
+
+      // 处理不同类型的错误
+      if (error.code === 4001) {
+        setError('用户拒绝了连接请求');
+      } else if (error.code === -32002) {
+        setError('MetaMask 正在处理请求，请检查扩展程序');
+      } else if (error.message?.includes('User rejected')) {
+        setError('用户拒绝了连接请求');
+      } else {
+        setError(`连接失败: ${error.message || '未知错误'}`);
+      }
+    } finally {
+      // finally块总是会执行，无论是否有错误
+      // 结束加载
+      setIsLoading(false);
+    }
+  };
+
+
 
 
   return (
