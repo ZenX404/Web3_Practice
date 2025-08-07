@@ -248,7 +248,59 @@ export default function Home() {
   };
 
 
-  // 获取各种余额的异步函数
+  // 获取用户存在TokenBank中的余额以及用户剩余的余额
+  const fetchBalances = async () => {
+    // 如果没有地址就直接返回
+    if (!address) return;
+
+    // 创建TokenBank合约对象
+    const tokenBankContract = getContract({
+      address: TOKEN_BANK_ADDRESS,
+      abi: TokenBank_ABI,
+      client: publicClient
+    });
+
+
+    try {
+      // 获取用户在TokenBank中的存款余额
+      // as bigint 是类型断言，表示返回值是大整数类型
+      /**
+       * 代码分解
+          tokenBankContract - 这是通过 viem 的 getContract 函数创建的合约实例
+          .read - 表示这是一个只读操作，不会修改区块链状态（不消耗 gas）
+          .balanceOf - 合约中定义的函数名
+          ([address]) - 函数参数以数组形式传递，即使只有一个参数也需要放在数组中
+          as bigint - TypeScript 类型断言，告诉编译器函数返回值应该被视为 bigint 类型
+       */
+      const desposit = await tokenBankContract.read.balanceOf([address]) as bigint;
+      // formatEther 将wei转换为ether单位(除以10^18)
+      setDepositBalance(formatEther(desposit));
+
+      // 获取Token合约的地址
+      const tokenContractAddress = await tokenBankContract.read.token() as `0x${string}`;
+      // 创建Token合约实例
+      const tokenContract = getContract({
+        address: tokenContractAddress,
+        // 手动定义ERC20 balanceOf函数的ABI
+        abi: [{
+          "type": "function",
+          "name": "balanceOf",
+          "inputs": [{ "name": "owner", "type": "address" }],
+          "outputs": [{ "name": "", "type": "uint256" }],
+          "stateMutability": "view"  // view表示只读函数
+        }],
+        client: publicClient
+      });
+
+      // 获取用户的Token余额
+      const tokenBalance = await tokenContract.read.balanceOf([address]) as bigint;
+      setTokenBalance(formatEther(tokenBalance));
+
+    } catch (error) {
+      console.error('获取余额失败：', error);
+    }
+  }
+
   
 
 
