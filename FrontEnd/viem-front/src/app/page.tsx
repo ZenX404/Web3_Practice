@@ -256,7 +256,7 @@ export default function Home() {
     // 创建TokenBank合约对象
     const tokenBankContract = getContract({
       address: TOKEN_BANK_ADDRESS,
-      abi: TokenBank_ABI,
+      abi: TokenBank_ABI.abi,
       client: publicClient
     });
 
@@ -301,7 +301,106 @@ export default function Home() {
     }
   }
 
-  
+  // 用户存款
+  const handleDeposit = async () => {
+    // 检查必要条件
+    if (!address || !depositAmount) return;
+    // 开始加载
+    setIsLoading(true);
+    setTxHash('');
+
+    try {
+      if (!window.ethereum) {
+        setError('MetaMasj 未安装');
+        return;
+      }
+
+      // 创建钱包客户端，用于发送需要签名的交易
+      const walletClient = createWalletClient({
+        chain: sepolia,
+        transport: custom(window.ethereum)  // 使用MetaMask作为传输层
+      });
+
+      // 首先需要批准TokenBank合约使用Token
+      const tokenBankContract = getContract({
+        address: TOKEN_BANK_ADDRESS,
+        abi: TokenBank_ABI.abi,
+        client: publicClient // 表示使用publicClient客户端实现与合约的调用交互
+      });
+      // 获取Token合约地址
+      const tokenAddress = await tokenBankContract.read.token() as `0x${string}`;
+      // 创建Token合约实例用于批准授权操作
+      const tokenContract = getContract({
+        address: tokenAddress,
+        // ERC20 approve函数的ABI  我们只需要输入我们需要调用的函数的abi即可
+        abi: [{
+          "type": "function",
+          "name": "approve",
+          "inputs": [
+            { "name": "spender", "type": "address" },
+            { "name": "amount", "type": "uint256" }
+          ],
+          "outputs": [{ "name": "", "type": "bool" }],
+          "stateMutability": "nonpayable"  // nonpayable表示需要gas但不接受ETH
+        }], 
+        client: {
+          public: publicClient,  // 用于调用读取函数  read
+          wallet: walletClient   // 用于调用写入函数  write
+        }
+      });
+
+      /**
+       * // 只读函数调用（不改变状态）
+         const result = await contract.read.functionName([param1, param2, ...]) as ReturnType;
+
+         // 写入函数调用（改变状态，需要签名和支付 gas）
+         const hash = await contract.write.functionName([param1, param2, ...], {
+          account: address,  // 发送交易的账户
+          // 其他可选参数
+         });
+       */
+      // 调用approve函数，允许TokenBank使用指定数量的Token，这样TokenBank就可以把用户想存的钱操作转入TokenBank合约中
+      // 调用wirte的时候，第一个参数是数组，就是Token合约approve函数的两个入参，第二个参数是一个结构体对象，传入调用approve函数的地址是谁，
+      // 这里我们就传入的要存款用户的地址，表明是用户自己调用的approve函数授权给TokenBank合约
+      const approveHash = await tokenContract.write.approve([
+        TOKEN_BANK_ADDRESS,
+        parseEther(depositAmount)], // parseEther将ether转换为wei(乘以10^18)
+        {account: address});
+
+      console.log('Approve hash:', approveHash);
+
+      // 等待批准交易被确认
+      await publicClient.waitForTransactionReceipt({hash: approveHash});
+
+      // 执行到这里说明批准交易已经被链上确认了
+      // 现在TokenBank合约已经可以操控用户的token余额了，下面开始存款操作
+
+      // 调用TokenBank合约的存款函数
+      // 但是这里要用钱包客户端调用，因为用户要通过操作钱包完成存款
+      const hash = await walletClient.writeContract({
+        address: TOKEN_BANK_ADDRESS,
+        abi: TokenBank_ABI.abi,
+        functionName: 'deposit', // 调用合约的deposit函数
+        args: [parseEther(depositAmount)],  // 函数参数
+        account: address // 发送交易的账户
+      });
+
+      console.log('Deposit hash:', hash);
+      // 保存交易哈希用于显示
+      setTxHash(hash);
+
+      // 等待交易确认后刷新余额
+      await publicClient.waitForTransactionReceipt({hash});
+      // 刷新所有余额
+      fetchBalances();
+      // 清空输入框
+      setDepositAmount('');
+    } catch (error) {
+      console.error('存款失败', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 
 
