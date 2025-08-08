@@ -403,6 +403,48 @@ export default function Home() {
   };
 
 
+  // 用户取款
+  const handleWithdraw = async () => {
+    if (!address || !withdrawAmount) return;
+    setIsLoading(true);
+    setTxHash('');
+
+    try {
+      if (!window.ethereum) {
+        setError('MetaMask 未安装');
+        return;
+      }
+
+      const walletClient = createWalletClient({
+        chain: sepolia,
+        transport: custom(window.ethereum)
+      });
+
+      // 通过钱包调用TokenBank合约的取款函数
+      const hash = await walletClient.writeContract({
+        address: TOKEN_BANK_ADDRESS,
+        abi: TokenBank_ABI.abi,
+        functionName: 'withdraw',
+        args: [[parseEther(withdrawAmount)]],
+        account: address
+      });
+
+      console.log('Withdraw hash:', hash);
+      setTxHash(hash);
+
+      await publicClient.waitForTransactionReceipt({hash});
+      fetchBalances();
+      setWithdrawAmount('');
+    } catch (error) {
+      console.error('取款失败', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  
+
+
 
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
