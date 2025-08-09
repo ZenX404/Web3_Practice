@@ -21,7 +21,7 @@ import { sepolia } from 'viem/chains';
 import TokenBank_ABI from './contracts/TokenBank.json';
 
 // 定义TokenBank合约的地址(这是一个常量)
-const TOKEN_BANK_ADDRESS = "0xDe74ba2a8BCfb0da3a36f6BffbdE9f98ef4f3B84";
+const TOKEN_BANK_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_BANK_ADDRESS;
 
 
 // 导出默认函数组件Home，React的组件本质上就是函数
@@ -68,7 +68,7 @@ export default function Home() {
   // createPublicClient是viem提供的组件，用来创建连接区块链网络的客户端，实现与区块链的交互
   const publicClient = createPublicClient({
     chain: sepolia, // 指定使用Sepolia测试网
-    transport: http('https://sepolia.infura.io/v3/fb22f989d7e14bce8b720ab082a8a0fe')  // RPC端点(需要用viem提供的http函数转换一下)  用来与区块链交互
+    transport: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL)  // RPC端点(需要用viem提供的http函数转换一下)  用来与区块链交互
   });
 
   // 计算是否在正确的网络上
