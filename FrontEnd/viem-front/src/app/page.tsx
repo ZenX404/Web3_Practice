@@ -38,10 +38,10 @@ export default function Home() {
   const [tokenBalance, setTokenBalance] = useState<string>('0');
 
   // 存储用户在TokenBank中的存款余额
-  const [depositBalance, setDepositBalance] = useState<string>('0');
+  const [depositeBalance, setdepositeBalance] = useState<string>('0');
 
   // 存储用户输入的存款金额
-  const [depositAmount, setDepositAmount] = useState<string>('');
+  const [depositeAmount, setdepositeAmount] = useState<string>('');
   
   // 存储用户输入的取款金额
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
@@ -171,8 +171,8 @@ export default function Home() {
 
       // 在添加事件监听器之前，先尝试删除一波事件监听器，避免重复注册
       if (window.ethereum && typeof(window.ethereum.removeAllListeners) === 'function') {
-        window.ehtereum.removeAllListeners('accountsChanged');
-        window.ehtereum.removeAllListeners('chainChanged');
+        window.ethereum.removeAllListeners('accountsChanged');
+        window.ethereum.removeAllListeners('chainChanged');
       }
 
       // 添加事件监听器
@@ -241,7 +241,7 @@ export default function Home() {
     setError('');
 
     // 移除事件监听器
-    if (windows.ethereum && windwos.ethereum.removeAllListeners === 'function') {
+    if (window.ethereum && window.ethereum.removeAllListeners === 'function') {
       window.ethereum.removeAllListeners('accountsChanged');
       window.ethereum.removeAllListeners('chainChanged');
     }
@@ -256,7 +256,7 @@ export default function Home() {
     // 创建TokenBank合约对象
     const tokenBankContract = getContract({
       address: TOKEN_BANK_ADDRESS,
-      abi: TokenBank_ABI.abi,
+      abi: TokenBank_ABI,
       client: publicClient
     });
 
@@ -274,7 +274,7 @@ export default function Home() {
        */
       const desposit = await tokenBankContract.read.balanceOf([address]) as bigint;
       // formatEther 将wei转换为ether单位(除以10^18)
-      setDepositBalance(formatEther(desposit));
+      setdepositeBalance(formatEther(desposit));
 
       // 获取Token合约的地址
       const tokenContractAddress = await tokenBankContract.read.token() as `0x${string}`;
@@ -302,9 +302,9 @@ export default function Home() {
   }
 
   // 用户存款
-  const handleDeposit = async () => {
+  const handledeposite = async () => {
     // 检查必要条件
-    if (!address || !depositAmount) return;
+    if (!address || !depositeAmount) return;
     // 开始加载
     setIsLoading(true);
     setTxHash('');
@@ -324,7 +324,7 @@ export default function Home() {
       // 首先需要批准TokenBank合约使用Token
       const tokenBankContract = getContract({
         address: TOKEN_BANK_ADDRESS,
-        abi: TokenBank_ABI.abi,
+        abi: TokenBank_ABI,
         client: publicClient // 表示使用publicClient客户端实现与合约的调用交互
       });
       // 获取Token合约地址
@@ -364,8 +364,8 @@ export default function Home() {
       // 这里我们就传入的要存款用户的地址，表明是用户自己调用的approve函数授权给TokenBank合约
       const approveHash = await tokenContract.write.approve([
         TOKEN_BANK_ADDRESS,
-        parseEther(depositAmount)], // parseEther将ether转换为wei(乘以10^18)
-        {account: address});
+        parseEther(depositeAmount)], // parseEther将ether转换为wei(乘以10^18)
+        {account: address}); // 因为这里调用的是写操作，使用walletClient，所以需要指定调用的用户是谁，要扣除gas费
 
       console.log('Approve hash:', approveHash);
 
@@ -375,17 +375,27 @@ export default function Home() {
       // 执行到这里说明批准交易已经被链上确认了
       // 现在TokenBank合约已经可以操控用户的token余额了，下面开始存款操作
 
+      // 在实际调用前先模拟
+    const simulationResult = await publicClient.simulateContract({
+      address: TOKEN_BANK_ADDRESS,
+      abi: TokenBank_ABI,
+      functionName: 'deposite',
+      args: [parseEther(depositeAmount)],
+      account: address,
+    });
+    console.log('模拟调用成功:', simulationResult);
+
       // 调用TokenBank合约的存款函数
       // 但是这里要用钱包客户端调用，因为用户要通过操作钱包完成存款
       const hash = await walletClient.writeContract({
         address: TOKEN_BANK_ADDRESS,
-        abi: TokenBank_ABI.abi,
-        functionName: 'deposit', // 调用合约的deposit函数
-        args: [parseEther(depositAmount)],  // 函数参数
-        account: address // 发送交易的账户
+        abi: TokenBank_ABI,
+        functionName: 'deposite', // 调用合约的deposite函数
+        args: [parseEther(depositeAmount)],  // 函数参数
+        account: address // 发送交易的账户（这里就是要存款的用户）  写操作
       });
 
-      console.log('Deposit hash:', hash);
+      console.log('deposite hash:', hash);
       // 保存交易哈希用于显示
       setTxHash(hash);
 
@@ -394,7 +404,7 @@ export default function Home() {
       // 刷新所有余额
       fetchBalances();
       // 清空输入框
-      setDepositAmount('');
+      setdepositeAmount('');
     } catch (error) {
       console.error('存款失败', error);
     } finally {
@@ -423,9 +433,9 @@ export default function Home() {
       // 通过钱包调用TokenBank合约的取款函数(不需要approve)
       const hash = await walletClient.writeContract({
         address: TOKEN_BANK_ADDRESS,
-        abi: TokenBank_ABI.abi,
+        abi: TokenBank_ABI,
         functionName: 'withdraw',
-        args: [[parseEther(withdrawAmount)]],
+        args: [parseEther(withdrawAmount)],
         account: address
       });
 
@@ -453,7 +463,7 @@ export default function Home() {
   // 第一个参数是效果函数，也就是需要执行的副作用代码。第二个参数是依赖数组，指定在哪些值变化时重新执行副作用，如果是空数组[]表示仅在组件挂载和卸载时执行
   // useEffect函数会在组件首次渲染后以及address变化时执行，当前这个页面导出的Home就是一个组件，也就是等整个页面都加载渲染完，才会去用这个useEffect副作用函数
   useEffect(() => {
-    const fetchEthBalance = aynsc () => {
+    const fetchEthBalance = async () => {
       if (!address) return;
 
       // 创建获取用户ETH余额的函数
@@ -461,8 +471,8 @@ export default function Home() {
         address: address
       });
 
-      setBalance(ethBalance);
-    }
+      setBalance(formatEther(ethBalance));
+    };
 
     // 当地址存在时，获取ETH余额和其他余额
     if (address) {
@@ -473,103 +483,159 @@ export default function Home() {
   }, [address]); // 依赖数组：当address变化时会重新执行该useEffect钩子函数
 
 
+  // Home组件的返回值(JSX)，也就是在这里返回整个页面样式，通过上面的函数加载数值，然后渲染到下面的页面上，最后返回出去显示页面。
+  // JSX是JavaScript的语法扩展，允许在JS中写HTML-like的代码
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    // 最外层容器div，使用Tailwind CSS类名进行样式设置
+    <div className="min-h-screen flex flex-col items-center justify-center p-8">
+      {/* 标题 */}
+      <h1 className="text-3xl font-bold mb-8">Token Bank Demo</h1>
+      
+      {/* 主要内容区域 */}
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl">
+        {/* 错误提示区域 */}
+        {/* 条件渲染：只有当error存在时才显示 */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+        
+        {/* 根据连接状态显示不同内容 */}
+        {!isConnected ? (
+          // 未连接时显示连接按钮
+          <button
+            onClick={connectWallet}  // 点击事件处理器
+            disabled={isLoading}     // 根据加载状态禁用按钮
+            // 模板字符串和条件操作符用于动态类名
+            className={`w-full py-2 px-4 rounded transition-colors ${
+              isLoading 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-blue-500 hover:bg-blue-600'
+            } text-white`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            {/* 根据加载状态显示不同文本 */}
+            {isLoading ? '连接中...' : '连接 MetaMask'}
+          </button>
+        ) : (
+          // 已连接时显示主要功能区域
+          <div className="space-y-4">
+            {/* 钱包地址显示 */}
+            <div className="text-center">
+              <p className="text-gray-800 font-semibold">钱包地址:</p>
+              {/* break-all用于长文本换行 */}
+              <p className="font-mono break-all text-gray-900">{address}</p>
+            </div>
+            
+            {/* 当前网络显示 */}
+            <div className="text-center">
+              <p className="text-gray-800 font-semibold">当前网络:</p>
+              {/* 根据网络状态动态设置文本颜色 */}
+              <p className={`font-mono font-bold ${isCorrectNetwork ? 'text-green-600' : 'text-red-600'}`}>
+                {/* 三元操作符用于条件显示 */}
+                {chainId === sepolia.id ? sepolia.name : `未知网络 (Chain ID: ${chainId})`}
+                {/* 嵌套的条件渲染 */}
+                {!isCorrectNetwork && (
+                  <span className="block text-sm text-red-500 mt-1">
+                    ⚠️ 请切换到 {sepolia.name} 网络
+                  </span>
+                )}
+              </p>
+            </div>
+            
+            {/* ETH余额显示 */}
+            <div className="text-center">
+              <p className="text-gray-800 font-semibold">ETH 余额:</p>
+              <p className="font-mono text-gray-900 text-lg">{balance} ETH</p>
+            </div>
+            
+            {/* Token 余额显示 */}
+            <div className="text-center">
+              <p className="text-gray-800 font-semibold">Token 余额:</p>
+              <p className="font-mono text-gray-900 text-lg">{tokenBalance} Token</p>
+            </div>
+            
+            {/* 存款余额显示 */}
+            <div className="text-center">
+              <p className="text-gray-800 font-semibold">存款余额:</p>
+              <p className="font-mono text-gray-900 text-lg">{depositeBalance} Token</p>
+            </div>
+            
+            {/* 存款表单 */}
+            <div className="border p-4 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2 text-black">存款</h3>
+              <div className="flex space-x-2">
+                {/* 受控输入组件 */}
+                <input
+                  type="text"
+                  value={depositeAmount}  // 受状态控制的值
+                  // 事件处理器：更新状态
+                  onChange={(e) => setdepositeAmount(e.target.value)}
+                  placeholder="输入存款金额"
+                  className="flex-1 border rounded p-2 text-black"
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={handledeposite}
+                  // 多个条件的组合判断
+                  disabled={isLoading || !depositeAmount || !isCorrectNetwork}
+                  className={`px-4 py-2 rounded ${
+                    isLoading || !isCorrectNetwork
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-500 hover:bg-green-600'
+                  } text-white`}
+                >
+                  {/* 嵌套的三元操作符 */}
+                  {isLoading ? '处理中...' : !isCorrectNetwork ? '网络错误' : '存款'}
+                </button>
+              </div>
+            </div>
+            
+            {/* 取款表单 */}
+            <div className="border p-4 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2 text-black">取款</h3>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="输入取款金额"
+                  className="flex-1 border rounded p-2 text-black"
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={handleWithdraw}
+                  disabled={isLoading || !withdrawAmount || !isCorrectNetwork}
+                  className={`px-4 py-2 rounded ${
+                    isLoading || !isCorrectNetwork
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-red-500 hover:bg-red-600'
+                  } text-white`}
+                >
+                  {isLoading ? '处理中...' : !isCorrectNetwork ? '网络错误' : '取款'}
+                </button>
+              </div>
+            </div>
+            
+            {/* 交易哈希显示 */}
+            {/* 条件渲染：只有当txHash存在时才显示 */}
+            {txHash && (
+              <div className="text-center">
+                <p className="text-gray-600">交易哈希:</p>
+                <p className="font-mono break-all text-blue-500">{txHash}</p>
+              </div>
+            )}
+            
+            {/* 断开连接按钮 */}
+            <button
+              onClick={disconnectWallet}
+              className="w-full bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 transition-colors"
+            >
+              断开连接
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
