@@ -248,7 +248,7 @@ export default function Home() {
   };
 
 
-  // 获取用户存在TokenBank中的余额以及用户剩余的余额
+  // 获取用户存在TokenBank中的余额以及用户剩余的token余额
   const fetchBalances = async () => {
     // 如果没有地址就直接返回
     if (!address) return;
@@ -420,7 +420,7 @@ export default function Home() {
         transport: custom(window.ethereum)
       });
 
-      // 通过钱包调用TokenBank合约的取款函数
+      // 通过钱包调用TokenBank合约的取款函数(不需要approve)
       const hash = await walletClient.writeContract({
         address: TOKEN_BANK_ADDRESS,
         abi: TokenBank_ABI.abi,
@@ -431,7 +431,7 @@ export default function Home() {
 
       console.log('Withdraw hash:', hash);
       setTxHash(hash);
-
+      // 等待交易确认后刷新余额
       await publicClient.waitForTransactionReceipt({hash});
       fetchBalances();
       setWithdrawAmount('');
@@ -442,8 +442,35 @@ export default function Home() {
     }
   };
 
-  
+  /**
+   * useEffect 是 React 中的一个核心 Hook，主要用于处理组件中的"副作用"。所谓副作用，指的是在组件渲染之外发生的操作，如：
+      数据获取 - 从API或区块链获取数据
+      订阅/监听事件 - 如区块链事件、窗口大小变化等
+      手动DOM操作 - 直接操作DOM元素
+      定时器 - 设置和清除计时器
+   */
+  // useEffect 是 React 的副作用钩子，用于在组件渲染后执行某些操作。
+  // 第一个参数是效果函数，也就是需要执行的副作用代码。第二个参数是依赖数组，指定在哪些值变化时重新执行副作用，如果是空数组[]表示仅在组件挂载和卸载时执行
+  // useEffect函数会在组件首次渲染后以及address变化时执行，当前这个页面导出的Home就是一个组件，也就是等整个页面都加载渲染完，才会去用这个useEffect副作用函数
+  useEffect(() => {
+    const fetchEthBalance = aynsc () => {
+      if (!address) return;
 
+      // 创建获取用户ETH余额的函数
+      const ethBalance = await publicClient.getBalance({
+        address: address
+      });
+
+      setBalance(ethBalance);
+    }
+
+    // 当地址存在时，获取ETH余额和其他余额
+    if (address) {
+      fetchEthBalance();
+      fetchBalances();
+    }
+    // 不提供第二个参数则在每次渲染后执行
+  }, [address]); // 依赖数组：当address变化时会重新执行该useEffect钩子函数
 
 
   return (
